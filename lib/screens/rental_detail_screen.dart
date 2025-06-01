@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class RentalDetailScreen extends StatefulWidget {
   final String rentalId;
@@ -12,6 +13,26 @@ class RentalDetailScreen extends StatefulWidget {
 }
 
 class _RentalDetailScreenState extends State<RentalDetailScreen> {
+  String? _userRole;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkUserRole();
+  }
+
+  Future<void> _checkUserRole() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+      if (mounted) {
+        setState(() {
+          _userRole = userDoc.data()?['role'] as String?;
+        });
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -19,7 +40,7 @@ class _RentalDetailScreenState extends State<RentalDetailScreen> {
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance.collection('rentals').doc(widget.rentalId).get(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting || _userRole == null) {
             return const Center(child: CircularProgressIndicator());
           }
           if (!snapshot.hasData || !snapshot.data!.exists) {
@@ -27,7 +48,7 @@ class _RentalDetailScreenState extends State<RentalDetailScreen> {
           }
 
           final data = snapshot.data!.data() as Map<String, dynamic>;
-          final isAdmin = true; // TODO: Check actual user role
+          final isAdmin = _userRole == 'admin';
 
           return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
@@ -78,13 +99,64 @@ class _RentalDetailScreenState extends State<RentalDetailScreen> {
                          label: const Text('Setujui'),
                          style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
                          onPressed: () async {
-                           await snapshot.data!.reference.update({'status': 'approved'});
-                           if (mounted) {
-                             ScaffoldMessenger.of(context).showSnackBar(
-                               const SnackBar(content: Text('Penyewaan disetujui!'), backgroundColor: Colors.green),
-                             );
-                              Navigator.pop(context);
-                           }
+                           try {
+                              // Get bikeId from the rental document
+                              final data = snapshot.data!.data() as Map<String, dynamic>; // Get data again if needed
+                              final bikeId = data['bikeId'];
+
+                              if (bikeId != null) {
+                                final bikeRef = FirebaseFirestore.instance.collection('bikes').doc(bikeId);
+
+                                await FirebaseFirestore.instance.runTransaction((transaction) async {
+                                  // Get the current bike data within the transaction
+                                  final bikeSnapshot = await transaction.get(bikeRef);
+                                  if (bikeSnapshot.exists) {
+                                    final currentQuantity = bikeSnapshot.data()?['quantity'] ?? 0;
+                                    if (currentQuantity > 0) {
+                                      // Decrement quantity by 1
+                                      transaction.update(bikeRef, {'quantity': currentQuantity - 1});
+                                      // Update rental status to approved
+                                      transaction.update(snapshot.data!.reference, {'status': 'approved'});
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Penyewaan disetujui dan stok sepeda diperbarui!'), backgroundColor: Colors.green)
+                                        );
+                                      }
+                                    } else {
+                                      // Handle case where quantity is already 0
+                                      if (mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('Stok sepeda habis.'), backgroundColor: Colors.orange)
+                                        );
+                                      }
+                                    }
+                                  } else {
+                                    // Handle case where bike document doesn't exist
+                                    if (mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(content: Text('Data sepeda tidak ditemukan.'), backgroundColor: Colors.red)
+                                      );
+                                    }
+                                  }
+                                });
+                              } else {
+                                 if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('ID Sepeda tidak ditemukan di data sewa.'), backgroundColor: Colors.red)
+                                    );
+                                  }
+                              }
+                               if (mounted) {
+                                  // Pop only after transaction attempt
+                                  Navigator.pop(context);
+                                }
+                            } catch (e) {
+                               if (mounted) {
+                                 ScaffoldMessenger.of(context).showSnackBar(
+                                   SnackBar(content: Text('Gagal menyetujui permintaan: $e'), backgroundColor: Colors.red)
+                                 );
+                               }
+                            }
                          },
                        ),
                        ElevatedButton.icon(
