@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "425464564023",
+    "project_id": "rentalps-65328",
+    "storage_bucket": "rentalps-65328.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:425464564023:android:f691b67014ece93ed932b2",
+        "android_client_info": {
+          "package_name": "com.example.rental_sepeda"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCbvFg8W7Eg6j2NyS-oF6aVUHp3xSVmd8U"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
