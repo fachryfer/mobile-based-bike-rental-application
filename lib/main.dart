@@ -7,6 +7,7 @@ import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/user_home_screen.dart';
 import 'screens/admin_home_screen.dart';
+import 'screens/admin/add_bike_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,6 +35,7 @@ class MyApp extends StatelessWidget {
         '/register': (context) => const RegisterScreen(),
         '/user_home': (context) => const UserHomeScreen(),
         '/admin_home': (context) => const AdminHomeScreen(),
+        '/add_bike': (context) => const AddBikeScreen(),
       },
     );
   }

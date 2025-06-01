@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'rent_bike_form_screen.dart';
+import 'rental_detail_screen.dart';
 
 class UserHomeScreen extends StatefulWidget {
   const UserHomeScreen({super.key});
@@ -39,33 +41,47 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
                 }
+                if (snapshot.hasError) {
+                  print('Error fetching rentals: ${snapshot.error}');
+                  return Center(child: Text('Error memuat data: ${snapshot.error}'));
+                }
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return const Center(child: Text('Belum ada penyewaan.'));
                 }
+                final docs = snapshot.data!.docs;
+                
+                final rentalWidgets = docs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
+                  return Card(
+                    key: ValueKey(doc.id),
+                    margin: const EdgeInsets.symmetric(vertical: 6),
+                    child: ListTile(
+                      leading: const Icon(Icons.pedal_bike, color: Colors.blue),
+                      title: Text(data['bikeName'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Status: ${data['status'] ?? 'pending'}'),
+                          if (data['createdAt'] != null)
+                            Text('Tanggal: ${(data['createdAt'] as Timestamp).toDate().toString().substring(0, 16)}'),
+                        ],
+                      ),
+                      trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => RentalDetailScreen(rentalId: doc.id),
+                          ),
+                        );
+                      },
+                    ),
+                  );
+                }).toList();
+                
                 return ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  children: snapshot.data!.docs.map((doc) {
-                    final data = doc.data() as Map<String, dynamic>;
-                    return Card(
-                      margin: const EdgeInsets.symmetric(vertical: 6),
-                      child: ListTile(
-                        leading: const Icon(Icons.pedal_bike, color: Colors.blue),
-                        title: Text(data['bikeName'] ?? '-', style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Status: ${data['status'] ?? 'pending'}'),
-                            if (data['createdAt'] != null)
-                              Text('Tanggal: ${(data['createdAt'] as Timestamp).toDate().toString().substring(0, 16)}'),
-                          ],
-                        ),
-                        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                        onTap: () {
-                          // TODO: Tampilkan detail penyewaan
-                        },
-                      ),
-                    );
-                  }).toList(),
+                  children: rentalWidgets,
                 );
               },
             ),
@@ -78,7 +94,10 @@ class _UserHomeScreenState extends State<UserHomeScreen> {
           icon: const Icon(Icons.add),
           label: const Text('Form Sewa Sepeda'),
           onPressed: () {
-            // TODO: Navigasi ke form sewa sepeda
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const RentBikeFormScreen()),
+            );
           },
         ),
       ),
