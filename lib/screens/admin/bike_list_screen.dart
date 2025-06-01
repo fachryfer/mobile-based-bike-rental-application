@@ -36,59 +36,106 @@ class BikeListScreen extends StatelessWidget {
                  return Bike.fromFirestore(data, doc.id);
               }).toList();
 
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              return GridView.builder(
+                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12.0,
+                  mainAxisSpacing: 12.0,
+                  childAspectRatio: 0.75, // Adjusted aspect ratio to give more vertical space
+                ),
                 itemCount: bikes.length,
                 itemBuilder: (context, index) {
                   final bike = bikes[index];
                   return Card(
-                    key: ValueKey(bike.id),
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(
-                      leading: const Icon(Icons.pedal_bike, color: Colors.blueGrey),
-                      title: Text(bike.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text('Tersedia: ${bike.quantity}'),
-                      // TODO: Add options for editing/deleting bikes later
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
+                     elevation: 4.0,
+                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                    clipBehavior: Clip.antiAlias,
+                    child: Column(
+                       crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          // Edit Button
-                          IconButton(
-                            icon: const Icon(Icons.edit, color: Colors.blue),
-                            onPressed: () {
-                              // TODO: Implement edit navigation
-                              // print('Edit bike ${bike.id}'); // Placeholder
-                               Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => EditBikeScreen(bikeId: bike.id),
+                          // Bike Image
+                          Expanded(
+                            child: bike.imageUrl != null && bike.imageUrl!.isNotEmpty
+                                ? Image.network(
+                                    bike.imageUrl!,
+                                    fit: BoxFit.cover, // Ensure image covers the allocated space
+                                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 50),
+                                  )
+                                : const Center(child: Icon(Icons.pedal_bike, size: 50, color: Colors.blueGrey)),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  bike.name,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                              );
-                            },
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Stok: ${bike.quantity}',
+                                  style: TextStyle(fontSize: 14, color: bike.quantity > 0 ? Colors.green : Colors.red),
+                                ),
+                                if (bike.description != null && bike.description!.isNotEmpty)
+                                   Text(
+                                    bike.description!,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                  ),
+                              ],
+                            ),
                           ),
-                          // Delete Button
-                          IconButton(
-                            icon: const Icon(Icons.delete, color: Colors.red),
-                            onPressed: () async {
-                              // Implement delete functionality
-                              try {
-                                await FirebaseFirestore.instance.collection('bikes').doc(bike.id).delete();
-                                if (context.mounted) {
-                                   ScaffoldMessenger.of(context).showSnackBar(
-                                     const SnackBar(content: Text('Sepeda berhasil dihapus'), backgroundColor: Colors.green)
-                                   );
-                                }
-                              } catch (e) {
-                                 if (context.mounted) {
-                                   ScaffoldMessenger.of(context).showSnackBar(
-                                     SnackBar(content: Text('Gagal menghapus sepeda: $e'), backgroundColor: Colors.red)
-                                   );
-                                 }
-                              }
-                            },
-                          ),
+                           const Spacer(), // Push buttons to the bottom
+                           Padding(
+                             padding: const EdgeInsets.only(left: 8.0, right: 8.0, bottom: 8.0),
+                             child: Row(
+                               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                               mainAxisSize: MainAxisSize.max,
+                               children: [
+                                 Expanded(
+                                   child: ElevatedButton(
+                                     onPressed: () {
+                                         Navigator.push(
+                                          context,
+                                          MaterialPageRoute(builder: (context) => EditBikeScreen(bikeId: bike.id)),
+                                        );
+                                     },
+                                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4), textStyle: const TextStyle(fontSize: 11)), // Adjusted padding and text size
+                                     child: const Text('Edit'),
+                                   ),
+                                 ),
+                                 const SizedBox(width: 8),
+                                 Expanded(
+                                   child: ElevatedButton(
+                                     onPressed: () async {
+                                       try {
+                                         await FirebaseFirestore.instance.collection('bikes').doc(bike.id).delete();
+                                         if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              const SnackBar(content: Text('Sepeda berhasil dihapus'), backgroundColor: Colors.green)
+                                            );
+                                         }
+                                       } catch (e) {
+                                          if (context.mounted) {
+                                            ScaffoldMessenger.of(context).showSnackBar(
+                                              SnackBar(content: Text('Gagal menghapus sepeda: $e'), backgroundColor: Colors.red)
+                                            );
+                                          }
+                                       }
+                                     },
+                                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red, padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4), textStyle: const TextStyle(fontSize: 11)), // Adjusted padding and text size
+                                     child: const Text('Hapus'),
+                                   ),
+                                 ),
+                               ],
+                             ),
+                           ),
                         ],
-                      ),
                     ),
                   );
                 },

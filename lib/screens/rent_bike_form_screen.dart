@@ -8,7 +8,9 @@ import 'package:http/http.dart' as http; // Import http
 import '../models/bike.dart'; // Import Bike model
 
 class RentBikeFormScreen extends StatefulWidget {
-  const RentBikeFormScreen({super.key});
+  final String? bikeId; // Add nullable bikeId parameter
+
+  const RentBikeFormScreen({super.key, this.bikeId}); // Update constructor
 
   @override
   State<RentBikeFormScreen> createState() => _RentBikeFormScreenState();
@@ -24,6 +26,15 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
   // State variables for bikes dropdown
   List<Bike> _availableBikes = [];
   String? _selectedBikeId;
+
+  @override
+  void initState() {
+    super.initState();
+    // If bikeId is provided, pre-select it
+    if (widget.bikeId != null) {
+      _selectedBikeId = widget.bikeId;
+    }
+  }
 
   Future<void> _pickDate() async {
     final now = DateTime.now();
