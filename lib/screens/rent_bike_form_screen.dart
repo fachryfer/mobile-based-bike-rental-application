@@ -19,7 +19,10 @@ class RentBikeFormScreen extends StatefulWidget {
 class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
   final _formKey = GlobalKey<FormState>();
   final _durationController = TextEditingController();
+  final _fullNameController = TextEditingController();
+  final _phoneNumberController = TextEditingController();
   DateTime? _selectedDate;
+  DateTime? _endDate;
   File? _selectedImage;
   bool _isLoading = false;
 
@@ -27,12 +30,57 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
   List<Bike> _availableBikes = [];
   String? _selectedBikeId;
 
+  // State variable for calculated total price
+  double _totalPrice = 0.0;
+
   @override
   void initState() {
     super.initState();
     // If bikeId is provided, pre-select it
     if (widget.bikeId != null) {
       _selectedBikeId = widget.bikeId;
+    }
+    _durationController.addListener(_calculateEndDate);
+  }
+
+  void _calculateEndDate() {
+    if (_selectedDate != null && _durationController.text.isNotEmpty) {
+      try {
+        final duration = int.parse(_durationController.text.trim());
+        setState(() {
+          _endDate = _selectedDate!.add(Duration(days: duration));
+          _updateTotalPrice(); // Update total price when duration changes
+        });
+      } catch (e) {
+        setState(() {
+           _endDate = null;
+        });
+      }
+    } else {
+      setState(() {
+        _endDate = null;
+      });
+    }
+  }
+
+  // Function to update total price
+  void _updateTotalPrice() {
+    if (_selectedBikeId != null && _durationController.text.isNotEmpty) {
+      try {
+        final selectedBike = _availableBikes.firstWhere((bike) => bike.id == _selectedBikeId);
+        final duration = int.parse(_durationController.text.trim());
+        setState(() {
+          _totalPrice = selectedBike.price * duration;
+        });
+      } catch (e) {
+        setState(() {
+          _totalPrice = 0.0; // Reset if calculation fails
+        });
+      }
+    } else {
+      setState(() {
+        _totalPrice = 0.0; // Reset if bike or duration is not selected/entered
+      });
     }
   }
 
@@ -47,6 +95,7 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
     if (picked != null) {
       setState(() {
         _selectedDate = picked;
+        _calculateEndDate();
       });
     }
   }
@@ -130,16 +179,25 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
       // Find the selected bike object from the available list using its ID
       final selectedBike = _availableBikes.firstWhere((bike) => bike.id == _selectedBikeId);
 
+      // Calculate total price
+      final duration = int.parse(_durationController.text.trim());
+      final totalPrice = selectedBike.price * duration;
+
       await FirebaseFirestore.instance.collection('rentals').add({
         'userId': user.uid,
         'userName': userDoc.data()?['name'] ?? '',
-        'bikeId': selectedBike.id, // Save bike ID
-        'bikeName': selectedBike.name, // Save bike name
-        'duration': _durationController.text.trim(),
-        'date': _selectedDate,
+        'fullName': _fullNameController.text.trim(),
+        'phoneNumber': _phoneNumberController.text.trim(),
+        'bikeId': selectedBike.id,
+        'bikeName': selectedBike.name,
+        'duration': int.parse(_durationController.text.trim()),
+        'rentalDate': _selectedDate,
+        'returnDate': _endDate,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
-        'imageUrl': imageUrl, // Simpan URL gambar
+        'imageUrl': imageUrl,
+        'pricePerDay': selectedBike.price, // Added price per day
+        'totalPrice': totalPrice, // Added total price
       });
 
       // TODO: Implement quantity reduction on approval later
@@ -166,6 +224,8 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
   @override
   void dispose() {
     _durationController.dispose();
+    _fullNameController.dispose();
+    _phoneNumberController.dispose();
     super.dispose();
   }
 
@@ -229,11 +289,55 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
                       onChanged: (String? newValue) {
                         setState(() {
                           _selectedBikeId = newValue;
+                          _updateTotalPrice(); // Update total price when bike changes
                         });
                       },
                       validator: (value) => value == null ? 'Wajib memilih sepeda' : null,
                     );
                   },
+                ),
+                // Display price of selected bike
+                if (_selectedBikeId != null) ...[
+                   const SizedBox(height: 8),
+                   FutureBuilder<DocumentSnapshot>( // Use FutureBuilder to get the bike price
+                     future: FirebaseFirestore.instance.collection('bikes').doc(_selectedBikeId).get(),
+                     builder: (context, snapshot) {
+                       if (snapshot.connectionState == ConnectionState.waiting) {
+                         return const Text('Memuat harga...');
+                       }
+                       if (snapshot.hasError) {
+                         return Text('Error memuat harga: ${snapshot.error}');
+                       }
+                       if (!snapshot.hasData || !snapshot.data!.exists) {
+                         return const Text('Harga tidak tersedia');
+                       }
+                       final bikeData = snapshot.data!.data() as Map<String, dynamic>;
+                       final price = (bikeData['price'] ?? 0.0).toDouble();
+                       return Text(
+                         'Harga per Hari: Rp${price.toStringAsFixed(0)}', // Display price
+                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+                       );
+                     },
+                   ),
+                ],
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _fullNameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nama Lengkap',
+                    border: OutlineInputBorder(),
+                  ),
+                  validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _phoneNumberController,
+                  decoration: const InputDecoration(
+                    labelText: 'Nomor Telepon',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.phone,
+                  validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
                 ),
                 const SizedBox(height: 16),
                 TextFormField(
@@ -246,16 +350,21 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(_selectedDate == null
-                          ? 'Tanggal sewa belum dipilih'
-                          : 'Tanggal sewa: ${_selectedDate!.toLocal().toString().substring(0, 10)}'),
+                      child: Text(
+                          _selectedDate == null
+                              ? 'Tanggal sewa belum dipilih'
+                              : 'Tanggal Sewa: ${_selectedDate!.toLocal().toString().split(' ')[0]}'),
                     ),
-                    TextButton(
-                      onPressed: _pickDate,
-                      child: const Text('Pilih Tanggal'),
-                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(onPressed: _pickDate, child: const Text('Pilih Tanggal Sewa')),
                   ],
                 ),
+                const SizedBox(height: 8),
+                if (_endDate != null)
+                  Text(
+                      'Tanggal Pengembalian: ${_endDate!.toLocal().toString().split(' ')[0]}',
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
                 const SizedBox(height: 16),
                 Row(
                   children: [
@@ -270,6 +379,12 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
                   ],
                 ),
                 const SizedBox(height: 32),
+                Text(
+                  'Total Harga: Rp${_totalPrice.toStringAsFixed(0)}',
+                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: _isLoading ? null : _submit,
                   child: _isLoading

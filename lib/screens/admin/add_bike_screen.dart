@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:flutter/services.dart';
 
 class AddBikeScreen extends StatefulWidget {
   const AddBikeScreen({Key? key}) : super(key: key);
@@ -17,6 +18,7 @@ class _AddBikeScreenState extends State<AddBikeScreen> {
   final _nameController = TextEditingController();
   final _quantityController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _priceController = TextEditingController();
   File? _selectedImage;
   bool _isSaving = false;
 
@@ -24,6 +26,7 @@ class _AddBikeScreenState extends State<AddBikeScreen> {
   void dispose() {
     _nameController.dispose();
     _quantityController.dispose();
+    _priceController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -96,6 +99,7 @@ class _AddBikeScreenState extends State<AddBikeScreen> {
         await FirebaseFirestore.instance.collection('bikes').add({
           'name': _nameController.text,
           'quantity': int.parse(_quantityController.text),
+          'price': double.parse(_priceController.text),
           'description': _descriptionController.text.trim(),
           'imageUrl': imageUrl,
           'createdAt': Timestamp.now(),
@@ -106,6 +110,7 @@ class _AddBikeScreenState extends State<AddBikeScreen> {
           );
           _nameController.clear();
           _quantityController.clear();
+          _priceController.clear();
           _descriptionController.clear();
           setState(() {
             _selectedImage = null;
@@ -156,14 +161,40 @@ class _AddBikeScreenState extends State<AddBikeScreen> {
                 decoration: const InputDecoration(
                   labelText: 'Jumlah Ketersediaan',
                   border: OutlineInputBorder(),
+                  suffixText: ' pcs',
                 ),
                 keyboardType: TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                ],
                 validator: (value) {
                   if (value == null || value.isEmpty) {
                     return 'Mohon masukkan jumlah ketersediaan';
                   }
                   if (int.tryParse(value) == null || int.parse(value) <= 0) {
                     return 'Mohon masukkan angka positif';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16.0),
+              TextFormField(
+                controller: _priceController,
+                decoration: const InputDecoration(
+                  labelText: 'Harga Sewa per Hari',
+                  border: OutlineInputBorder(),
+                  prefixText: 'Rp ',
+                ),
+                keyboardType: TextInputType.numberWithOptions(decimal: true),
+                inputFormatters: [
+                  FilteringTextInputFormatter.allow(RegExp(r'^[0-9]*\.?[0-9]*$')),
+                ],
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Mohon masukkan harga sewa';
+                  }
+                  if (double.tryParse(value) == null || double.parse(value) <= 0) {
+                    return 'Mohon masukkan angka positif untuk harga';
                   }
                   return null;
                 },
