@@ -6,6 +6,7 @@ import 'dart:io';
 import 'dart:convert'; // Import for jsonDecode
 import 'package:http/http.dart' as http; // Import http
 import '../models/bike.dart'; // Import Bike model
+import 'package:intl/intl.dart' as intl;
 
 class RentBikeFormScreen extends StatefulWidget {
   final String? bikeId; // Add nullable bikeId parameter
@@ -26,9 +27,10 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
   File? _selectedImage;
   bool _isLoading = false;
 
-  // State variables for bikes dropdown
+  // State variables for bikes
   List<Bike> _availableBikes = [];
-  String? _selectedBikeId;
+  // Changed from single selected bike to a list of selected items
+  List<Map<String, dynamic>> _selectedItems = []; // List of {bikeId: String, quantity: int}
 
   // State variable for calculated total price
   double _totalPrice = 0.0;
@@ -36,11 +38,50 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
   @override
   void initState() {
     super.initState();
-    // If bikeId is provided, pre-select it
+    _fetchAvailableBikes(); // Fetch available bikes
+    // If bikeId is provided, add it as the initial item
     if (widget.bikeId != null) {
-      _selectedBikeId = widget.bikeId;
+      _selectedItems.add({'bikeId': widget.bikeId, 'quantity': 1});
     }
     _durationController.addListener(_calculateEndDate);
+    _durationController.addListener(_updateTotalPrice);
+  }
+
+  // Fetch available bikes from Firestore
+  Future<void> _fetchAvailableBikes() async {
+    try {
+      final snapshot = await FirebaseFirestore.instance.collection('bikes').get();
+      final bikes = snapshot.docs.map((doc) => Bike.fromFirestore(doc.data() as Map<String, dynamic>, doc.id)).toList();
+      setState(() {
+        _availableBikes = bikes;
+         // If initial bikeId was provided, ensure it's in the available list and update price
+         if (widget.bikeId != null && _availableBikes.any((bike) => bike.id == widget.bikeId)){
+            _updateTotalPrice();
+         }
+      });
+    } catch (e) {
+      print('Error fetching bikes: $e');
+       if (mounted) {
+           ScaffoldMessenger.of(context).showSnackBar(
+             SnackBar(content: Text('Gagal memuat daftar sepeda: $e'), backgroundColor: Colors.red),
+           );
+        }
+    }
+  }
+
+   // Function to add a new item row
+  void _addItem() {
+    setState(() {
+      _selectedItems.add({'bikeId': null, 'quantity': 1});
+    });
+  }
+
+  // Function to remove an item row
+  void _removeItem(int index) {
+    setState(() {
+      _selectedItems.removeAt(index);
+      _updateTotalPrice(); // Update total price after removing an item
+    });
   }
 
   void _calculateEndDate() {
@@ -49,7 +90,7 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
         final duration = int.parse(_durationController.text.trim());
         setState(() {
           _endDate = _selectedDate!.add(Duration(days: duration));
-          _updateTotalPrice(); // Update total price when duration changes
+          // Total price update is now handled by _updateTotalPrice listener on _durationController
         });
       } catch (e) {
         setState(() {
@@ -63,25 +104,28 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
     }
   }
 
-  // Function to update total price
+  // Function to update total price based on all selected items and duration
   void _updateTotalPrice() {
-    if (_selectedBikeId != null && _durationController.text.isNotEmpty) {
-      try {
-        final selectedBike = _availableBikes.firstWhere((bike) => bike.id == _selectedBikeId);
-        final duration = int.parse(_durationController.text.trim());
-        setState(() {
-          _totalPrice = selectedBike.price * duration;
-        });
-      } catch (e) {
-        setState(() {
-          _totalPrice = 0.0; // Reset if calculation fails
-        });
+    double calculatedPrice = 0.0;
+    final duration = int.tryParse(_durationController.text.trim()) ?? 0; // Use tryParse for safety
+
+    if (duration > 0) {
+      for (var item in _selectedItems) {
+        final bikeId = item['bikeId'];
+        final quantity = item['quantity'] ?? 0;
+        if (bikeId != null && quantity > 0) {
+          final selectedBike = _availableBikes.firstWhere(
+            (bike) => bike.id == bikeId,
+            orElse: () => Bike(id: '', name: '', price: 0.0, quantity: 0), // Provide a default dummy bike
+          );
+           calculatedPrice += selectedBike.price * quantity * duration;
+        }
       }
-    } else {
-      setState(() {
-        _totalPrice = 0.0; // Reset if bike or duration is not selected/entered
-      });
     }
+
+    setState(() {
+      _totalPrice = calculatedPrice;
+    });
   }
 
   Future<void> _pickDate() async {
@@ -96,6 +140,7 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
       setState(() {
         _selectedDate = picked;
         _calculateEndDate();
+        _updateTotalPrice(); // Update total price when date changes
       });
     }
   }
@@ -137,16 +182,37 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
   }
 
   Future<void> _submit() async {
-    // Check if a bike is selected
-    if (!_formKey.currentState!.validate() || _selectedDate == null || _selectedBikeId == null) {
+    // Validate form and check if at least one item is selected and has quantity > 0
+    if (!_formKey.currentState!.validate() || _selectedDate == null || _selectedItems.isEmpty || _selectedItems.every((item) => item['bikeId'] == null || item['quantity'] <= 0)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Lengkapi semua data dan pilih sepeda!'), backgroundColor: Colors.red),
+        const SnackBar(content: Text('Lengkapi semua data dan tambahkan minimal satu sepeda dengan jumlah yang valid!'), backgroundColor: Colors.red),
       );
       return;
     }
     setState(() {
       _isLoading = true;
     });
+
+    // Check available stock before submitting
+    for (var item in _selectedItems) {
+      final bikeId = item['bikeId'];
+      final quantityToRent = item['quantity'] ?? 0;
+      if (bikeId != null && quantityToRent > 0) {
+         final availableBike = _availableBikes.firstWhere((bike) => bike.id == bikeId);
+         if (availableBike.quantity < quantityToRent) {
+             if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Stok untuk ${availableBike.name} tidak mencukupi.'), backgroundColor: Colors.orange),
+              );
+               setState(() {
+                _isLoading = false;
+              });
+            }
+             return; // Stop submission if stock is insufficient
+         }
+      }
+    }
+
     try {
       final user = FirebaseAuth.instance.currentUser;
       final userDoc = await FirebaseFirestore.instance.collection('users').doc(user!.uid).get();
@@ -176,31 +242,36 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
         }
       }
 
-      // Find the selected bike object from the available list using its ID
-      final selectedBike = _availableBikes.firstWhere((bike) => bike.id == _selectedBikeId);
+      // Prepare items data for Firestore
+      final rentalItemsData = _selectedItems.map((item) {
+        final bike = _availableBikes.firstWhere((b) => b.id == item['bikeId']);
+        return {
+          'bikeId': item['bikeId'],
+          'bikeName': bike.name,
+          'quantity': item['quantity'],
+          'pricePerDay': bike.price,
+          // Total price per item can be calculated on the fly or stored
+          // 'itemTotalPrice': bike.price * item['quantity'] * int.parse(_durationController.text.trim()),
+        };
+      }).toList();
 
-      // Calculate total price
-      final duration = int.parse(_durationController.text.trim());
-      final totalPrice = selectedBike.price * duration;
 
       await FirebaseFirestore.instance.collection('rentals').add({
         'userId': user.uid,
         'userName': userDoc.data()?['name'] ?? '',
         'fullName': _fullNameController.text.trim(),
         'phoneNumber': _phoneNumberController.text.trim(),
-        'bikeId': selectedBike.id,
-        'bikeName': selectedBike.name,
+        'items': rentalItemsData, // Store list of items
         'duration': int.parse(_durationController.text.trim()),
         'rentalDate': _selectedDate,
         'returnDate': _endDate,
         'status': 'pending',
         'createdAt': FieldValue.serverTimestamp(),
-        'imageUrl': imageUrl,
-        'pricePerDay': selectedBike.price, // Added price per day
-        'totalPrice': totalPrice, // Added total price
+        'imageUrl': imageUrl, // Assuming only one image for the whole rental
+        'totalPrice': _totalPrice, // Store total price
       });
 
-      // TODO: Implement quantity reduction on approval later
+      // Quantity reduction will be handled by admin approval action now
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -223,6 +294,8 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
 
   @override
   void dispose() {
+    _durationController.removeListener(_calculateEndDate);
+    _durationController.removeListener(_updateTotalPrice);
     _durationController.dispose();
     _fullNameController.dispose();
     _phoneNumberController.dispose();
@@ -241,155 +314,118 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Replace TextFormField with DropdownButtonFormField
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance.collection('bikes').snapshots(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.hasError) {
-                      print('Error fetching bikes for dropdown: ${snapshot.error}');
-                      return const Center(child: Text('Error memuat daftar sepeda'));
-                    }
-                    if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                       return const Center(child: Text('Tidak ada sepeda tersedia'));
-                    }
-
-                    _availableBikes = snapshot.data!.docs.map((doc) {
-                      final data = doc.data() as Map<String, dynamic>;
-                      return Bike.fromFirestore(data, doc.id);
-                    }).toList();
-
-                    // Filter bikes with quantity > 0
-                    final availableBikesWithStock = _availableBikes.where((bike) => bike.quantity > 0).toList();
-
-                    if (availableBikesWithStock.isEmpty) {
-                       return const Center(child: Text('Tidak ada sepeda dengan stok tersedia'));
-                    }
-
-                    // If selectedBike is no longer in available list (e.g. quantity became 0),
-                    // reset selectedBike to null.
-                    if (_selectedBikeId != null && !availableBikesWithStock.any((bike) => bike.id == _selectedBikeId)){
-                         _selectedBikeId = null;
-                    }
-
-                    return DropdownButtonFormField<String>(
-                      decoration: const InputDecoration(
-                        labelText: 'Pilih Sepeda',
-                        border: OutlineInputBorder(),
-                      ),
-                      value: _selectedBikeId,
-                      items: availableBikesWithStock.map((bike) {
-                        return DropdownMenuItem<String>(
-                          value: bike.id,
-                          child: Text('${bike.name} (Tersedia: ${bike.quantity})'),
-                        );
-                      }).toList(),
-                      onChanged: (String? newValue) {
-                        setState(() {
-                          _selectedBikeId = newValue;
-                          _updateTotalPrice(); // Update total price when bike changes
-                        });
-                      },
-                      validator: (value) => value == null ? 'Wajib memilih sepeda' : null,
-                    );
-                  },
-                ),
-                // Display price of selected bike
-                if (_selectedBikeId != null) ...[
-                   const SizedBox(height: 8),
-                   FutureBuilder<DocumentSnapshot>( // Use FutureBuilder to get the bike price
-                     future: FirebaseFirestore.instance.collection('bikes').doc(_selectedBikeId).get(),
-                     builder: (context, snapshot) {
-                       if (snapshot.connectionState == ConnectionState.waiting) {
-                         return const Text('Memuat harga...');
-                       }
-                       if (snapshot.hasError) {
-                         return Text('Error memuat harga: ${snapshot.error}');
-                       }
-                       if (!snapshot.hasData || !snapshot.data!.exists) {
-                         return const Text('Harga tidak tersedia');
-                       }
-                       final bikeData = snapshot.data!.data() as Map<String, dynamic>;
-                       final price = (bikeData['price'] ?? 0.0).toDouble();
-                       return Text(
-                         'Harga per Hari: Rp${price.toStringAsFixed(0)}', // Display price
-                         style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-                       );
-                     },
-                   ),
-                ],
-                const SizedBox(height: 16),
-                TextFormField(
+                // --- Input Fields (Full Name, Phone Number, Date, Duration) ---
+                 TextFormField(
                   controller: _fullNameController,
                   decoration: const InputDecoration(
                     labelText: 'Nama Lengkap',
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.person_outline),
                   ),
-                  validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Mohon masukkan nama lengkap';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 16),
-                TextFormField(
+                 TextFormField(
                   controller: _phoneNumberController,
-                  decoration: const InputDecoration(
+                   decoration: const InputDecoration(
                     labelText: 'Nomor Telepon',
                     border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.phone),
                   ),
                   keyboardType: TextInputType.phone,
-                  validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Mohon masukkan nomor telepon';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 16),
-                TextFormField(
+                 const SizedBox(height: 16),
+                 ListTile(
+                  leading: const Icon(Icons.calendar_today),
+                  title: Text(_selectedDate == null ? 'Pilih Tanggal Sewa' : 'Tanggal Sewa: ${intl.DateFormat('dd/MM/yyyy').format(_selectedDate!)}'),
+                   trailing: const Icon(Icons.arrow_downward),
+                  onTap: _pickDate,
+                ),
+                 const SizedBox(height: 16),
+                 TextFormField(
                   controller: _durationController,
-                  decoration: const InputDecoration(labelText: 'Durasi (hari)'),
-                  keyboardType: TextInputType.number,
-                  validator: (v) => v == null || v.isEmpty ? 'Wajib diisi' : null,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                          _selectedDate == null
-                              ? 'Tanggal sewa belum dipilih'
-                              : 'Tanggal Sewa: ${_selectedDate!.toLocal().toString().split(' ')[0]}'),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(onPressed: _pickDate, child: const Text('Pilih Tanggal Sewa')),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                if (_endDate != null)
-                  Text(
-                      'Tanggal Pengembalian: ${_endDate!.toLocal().toString().split(' ')[0]}',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                   decoration: const InputDecoration(
+                    labelText: 'Durasi Sewa (hari)',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.timer),
                   ),
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _pickImage,
-                      icon: const Icon(Icons.photo),
-                      label: const Text('Upload Foto KTP (Opsional)'),
-                    ),
-                    const SizedBox(width: 8),
-                    if (_selectedImage != null)
-                      const Icon(Icons.check_circle, color: Colors.green),
-                  ],
+                  keyboardType: TextInputType.number,
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Mohon masukkan durasi sewa';
+                    }
+                    if (int.tryParse(value) == null || int.parse(value) <= 0) {
+                      return 'Durasi harus angka positif';
+                    }
+                    return null;
+                  },
                 ),
-                const SizedBox(height: 32),
+                if (_endDate != null) ...[
+                  const SizedBox(height: 16),
+                  Text('Tanggal Pengembalian: ${intl.DateFormat('dd/MM/yyyy').format(_endDate!)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ],
+                 const SizedBox(height: 24),
+
+                // --- Bike Selection and Quantity (Dynamic List) ---
+                const Text('Pilih Sepeda:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                ListView.builder(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(), // Disable scrolling for nested ListView
+                  itemCount: _selectedItems.length,
+                  itemBuilder: (context, index) {
+                    return _buildBikeItemRow(index);
+                  },
+                ),
+                 const SizedBox(height: 16),
+                Center(
+                  child: ElevatedButton.icon(
+                    icon: const Icon(Icons.add),
+                    label: const Text('Tambah Sepeda Lain'),
+                    onPressed: _addItem,
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+
+                // --- Photo Upload ---
+                const Text('Unggah Foto/Dokumen (Opsional):', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                 OutlinedButton.icon(
+                   icon: const Icon(Icons.camera_alt),
+                  label: Text(_selectedImage == null ? 'Pilih Foto' : 'Foto Terpilih'),
+                   onPressed: _pickImage,
+                 ),
+                if (_selectedImage != null) ...[
+                  const SizedBox(height: 16),
+                  Image.file(_selectedImage!, height: 150),
+                ],
+
+                const SizedBox(height: 24),
+
+                 // --- Total Price Display ---
                 Text(
-                  'Total Harga: Rp${_totalPrice.toStringAsFixed(0)}',
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.blue),
-                  textAlign: TextAlign.center,
-                ),
-                const SizedBox(height: 16),
+                   'Total Harga: Rp${_totalPrice.toStringAsFixed(0)}',
+                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
+                 ),
+
+                const SizedBox(height: 32),
+
+                // --- Submit Button ---
                 ElevatedButton(
                   onPressed: _isLoading ? null : _submit,
-                  child: _isLoading
-                      ? const CircularProgressIndicator()
-                      : const Text('Kirim Permintaan Sewa'),
+                  child: _isLoading ? const CircularProgressIndicator() : const Text('Kirim Permintaan Sewa'),
                 ),
               ],
             ),
@@ -398,4 +434,109 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
       ),
     );
   }
-} 
+
+  // Helper widget to build each bike item row
+  Widget _buildBikeItemRow(int index) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16.0),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            flex: 3,
+            child: DropdownButtonFormField<String>(
+              decoration: const InputDecoration(
+                labelText: 'Jenis Sepeda',
+                border: OutlineInputBorder(),
+                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16), // Adjust padding
+              ),
+              value: _selectedItems[index]['bikeId'],
+              items: _availableBikes.map((bike) {
+                // Only show bikes with quantity > 0
+                if (bike.quantity > 0) {
+                  return DropdownMenuItem<String>(
+                    value: bike.id,
+                    // Display bike name and available stock
+                    child: Text('${bike.name} (Stok: ${bike.quantity})'),
+                  );
+                } else {
+                  return null; // Don't show if stock is 0
+                }
+              }).whereType<DropdownMenuItem<String>>().toList(), // Filter out nulls
+              onChanged: (value) {
+                setState(() {
+                  _selectedItems[index]['bikeId'] = value;
+                  _updateTotalPrice(); // Update total price when bike changes
+                });
+              },
+              validator: (value) {
+                if (value == null) {
+                  return 'Pilih jenis sepeda';
+                }
+                return null;
+              },
+            ),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            flex: 1,
+            child: TextFormField(
+              initialValue: _selectedItems[index]['quantity'].toString(),
+              decoration: const InputDecoration(
+                labelText: 'Jumlah',
+                border: OutlineInputBorder(),
+                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16), // Adjust padding
+              ),
+              keyboardType: TextInputType.number,
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return ''; // Validator message handled by the overall form validation
+                }
+                 final quantity = int.tryParse(value);
+                 if (quantity == null || quantity <= 0) {
+                   return ''; // Validator message handled by the overall form validation
+                 }
+                 // Check against available stock for this specific bike type
+                 final selectedBikeId = _selectedItems[index]['bikeId'];
+                 if (selectedBikeId != null) {
+                    final availableBike = _availableBikes.firstWhere((bike) => bike.id == selectedBikeId);
+                    if (quantity > availableBike.quantity) {
+                      return 'Stok tidak cukup';
+                    }
+                 }
+                return null;
+              },
+              onChanged: (value) {
+                 final quantity = int.tryParse(value) ?? 0; // Use tryParse
+                setState(() {
+                  _selectedItems[index]['quantity'] = quantity;
+                   _updateTotalPrice(); // Update total price when quantity changes
+                });
+              },
+            ),
+          ),
+          // Add remove button if there's more than one item
+          if (_selectedItems.length > 1) ...[
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
+              onPressed: () => _removeItem(index),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// Existing CameraPosition and Marker definitions (should not be in State class)
+// const CameraPosition _kGooglePlex = CameraPosition(
+//   target: LatLng(3.558049482634812, 98.65088891654166),
+//   zoom: 14.4746,
+// );
+
+// const Marker _kPickupLocation = Marker(
+//   markerId: MarkerId('pickupLocation'),
+//   position: LatLng(3.558049482634812, 98.65088891654166),
+//   infoWindow: InfoWindow(title: 'Lokasi Pengambilan Sepeda'),
+// ); 
