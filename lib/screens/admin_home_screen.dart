@@ -95,46 +95,14 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                               icon: const Icon(Icons.check, color: Colors.green),
                               onPressed: () async {
                                 try {
-                                  // Get bikeId from the rental document
-                                  final bikeId = data['bikeId'];
-                                  if (bikeId != null) {
-                                    final bikeRef = FirebaseFirestore.instance.collection('bikes').doc(bikeId);
+                                  // Dapatkan referensi dokumen menggunakan ID untuk memastikan keabsahan
+                                  final rentalRef = FirebaseFirestore.instance.collection('rentals').doc(doc.id);
+                                  await rentalRef.update({'status': 'awaiting_pickup'});
 
-                                    await FirebaseFirestore.instance.runTransaction((transaction) async {
-                                      // Get the current bike data within the transaction
-                                      final bikeSnapshot = await transaction.get(bikeRef);
-                                      if (bikeSnapshot.exists) {
-                                        final currentQuantity = bikeSnapshot.data()?['quantity'] ?? 0;
-                                        if (currentQuantity > 0) { // Still check quantity before setting awaiting_pickup, though reduction is later
-                                          // Just update rental status to awaiting_pickup, quantity reduction happens on pickup
-                                          transaction.update(doc.reference, {'status': 'awaiting_pickup'});
-                                           if (mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Permintaan disetujui. Status diubah menjadi Menunggu Diambil.'), backgroundColor: Colors.green)
-                                            );
-                                          }
-                                        } else { // Handle case where quantity is already 0 when admin tries to approve
-                                          if (mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Stok sepeda habis. Tidak dapat menyetujui permintaan ini.'), backgroundColor: Colors.orange)
-                                            );
-                                          }
-                                        }
-                                      } else {
-                                        // Handle case where bike document doesn't exist
-                                         if (mounted) {
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Data sepeda tidak ditemukan.'), backgroundColor: Colors.red)
-                                            );
-                                          }
-                                      }
-                                    });
-                                  } else {
-                                     if (mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
-                                          const SnackBar(content: Text('ID Sepeda tidak ditemukan di data sewa.'), backgroundColor: Colors.red)
-                                        );
-                                      }
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('Permintaan disetujui. Status diubah menjadi Menunggu Diambil.'), backgroundColor: Colors.green),
+                                    );
                                   }
                                 } catch (e) {
                                   if (mounted) {

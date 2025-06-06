@@ -116,9 +116,9 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
         if (bikeId != null && quantity > 0) {
           final selectedBike = _availableBikes.firstWhere(
             (bike) => bike.id == bikeId,
-            orElse: () => Bike(id: '', name: '', price: 0.0, quantity: 0), // Provide a default dummy bike
+            orElse: () => Bike(id: '', name: '', pricePerDay: 0.0, quantity: 0), // Provide a default dummy bike
           );
-           calculatedPrice += selectedBike.price * quantity * duration;
+           calculatedPrice += selectedBike.pricePerDay * quantity * duration; // Use pricePerDay
         }
       }
     }
@@ -248,10 +248,8 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
         return {
           'bikeId': item['bikeId'],
           'bikeName': bike.name,
-          'quantity': item['quantity'],
-          'pricePerDay': bike.price,
-          // Total price per item can be calculated on the fly or stored
-          // 'itemTotalPrice': bike.price * item['quantity'] * int.parse(_durationController.text.trim()),
+          'quantity': item['quantity'] ?? 0, // Ensure quantity is included in item data
+          'pricePerDay': bike.pricePerDay, // Use pricePerDay
         };
       }).toList();
 

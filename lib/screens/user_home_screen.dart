@@ -200,6 +200,11 @@ class UserAvailableBikesTab extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
+                                  'Harga: Rp${bike.pricePerDay.toStringAsFixed(0)}/hari',
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.blueAccent),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
                                   'Stok: ${bike.quantity}',
                                   style: TextStyle(fontSize: 14, color: bike.quantity > 0 ? Colors.green : Colors.red),
                                 ),
@@ -248,17 +253,21 @@ class UserAvailableBikesTab extends StatelessWidget {
 class UserRentalHistoryUnifiedTab extends StatelessWidget {
   const UserRentalHistoryUnifiedTab({Key? key}) : super(key: key);
 
-  // Helper to create a summary string of rented items
-  String _buildItemsSummary(List<dynamic>? items) {
-    if (items == null || items.isEmpty) return 'Tidak ada detail sepeda';
+  // Helper to create a list of widgets displaying rented item details
+  List<Widget> _buildItemWidgets(List<dynamic>? items) {
+    if (items == null || items.isEmpty) return [const Text('Tidak ada detail sepeda')];
     return items.map((item) {
       if (item is Map<String, dynamic>) {
         final bikeName = item['bikeName'] ?? 'Unknown Bike';
         final quantity = item['quantity'] ?? 0;
-        return '${quantity}x $bikeName';
+        final pricePerDay = item['pricePerDay'] ?? 0.0; // Assume pricePerDay is stored in items list
+        return Text(
+          '- ${quantity}x $bikeName (Rp${pricePerDay.toStringAsFixed(0)}/hari)',
+          style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic),
+        );
       }
-      return '';
-    }).join(', '); // Join items with a comma and space
+      return const Text('');
+    }).toList();
   }
 
   @override
@@ -311,16 +320,18 @@ class UserRentalHistoryUnifiedTab extends StatelessWidget {
                         color: _getStatusColor(currentStatus),
                       ),
                       // Display summary of items instead of single bike name
-                      title: Text(_buildItemsSummary(data['items'] as List?), style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text('ID Sewa: ${doc.id.substring(0, 6)}...', style: const TextStyle(fontWeight: FontWeight.bold)), // Show truncated ID as title
                       subtitle: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Durasi: ${data['duration'] ?? '-'} hari'),
-                          Text('Status: ${currentStatus.replaceAll('_', ' ').toUpperCase()}', style: TextStyle(color: _getStatusColor(currentStatus))),
+                          ..._buildItemWidgets(data['items'] as List?), // Use the new list of item widgets
+                          const SizedBox(height: 4),
+                          Text('Durasi: ${data['duration'] ?? '-'} hari', style: const TextStyle(fontSize: 13)),
+                          Text('Status: ${currentStatus.replaceAll('_', ' ').toUpperCase()}', style: TextStyle(color: _getStatusColor(currentStatus), fontWeight: FontWeight.w600, fontSize: 13)),
                            if (data['createdAt'] != null)
-                             Text('Tanggal: ${(data['createdAt'] as Timestamp).toDate().toString().substring(0, 16)}'),
+                             Text('Tanggal: ${(data['createdAt'] as Timestamp).toDate().toString().substring(0, 16)}', style: const TextStyle(fontSize: 13)),
                            if (data['totalPrice'] != null) // Display total price in history list
-                            Text('Total: Rp${(data['totalPrice'] ?? 0.0).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                            Text('Total: Rp${(data['totalPrice'] ?? 0.0).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
                         ],
                       ),
                       onTap: () {
