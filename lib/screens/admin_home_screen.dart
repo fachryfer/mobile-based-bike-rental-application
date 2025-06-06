@@ -14,6 +14,10 @@ class AdminHomeScreen extends StatefulWidget {
 
 class _AdminHomeScreenState extends State<AdminHomeScreen> {
   int _selectedIndex = 0;
+  String _pendingSearchQuery = '';
+  String _historySearchQuery = '';
+  String? _selectedPendingStatusFilter;
+  String? _selectedHistoryStatusFilter;
 
   void _onItemTapped(int index) {
     setState(() {
@@ -31,11 +35,61 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           const SizedBox(height: 16),
           const Text('Permintaan Sewa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Cari Permintaan',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                    ),
+                    onChanged: (query) {
+                      setState(() {
+                        _pendingSearchQuery = query;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  flex: 1,
+                  child: DropdownButtonFormField<String>(
+                    decoration: InputDecoration(
+                      labelText: 'Status',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                    ),
+                    value: _selectedPendingStatusFilter,
+                    hint: const Text('Semua'),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Semua')),
+                      DropdownMenuItem(value: 'pending', child: Text('Pending')),
+                      DropdownMenuItem(value: 'awaiting_pickup', child: Text('Diambil')),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedPendingStatusFilter = value;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('rentals')
-                  .where('status', whereIn: ['pending', 'awaiting_pickup'])
+                  .where('status', whereIn: _selectedPendingStatusFilter == null
+                       ? ['pending', 'awaiting_pickup']
+                       : [_selectedPendingStatusFilter!])
                   .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
@@ -50,9 +104,34 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   return const Center(child: Text('Tidak ada permintaan sewa.'));
                 }
                 final docs = snapshot.data!.docs;
-                final pendingRentalWidgets = docs.map((doc) {
+                final filteredDocs = docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  // Helper to create a summary string of rented items
+                  final query = _pendingSearchQuery.toLowerCase();
+                  if (query.isEmpty) return true;
+                  final fullName = (data['fullName'] as String? ?? '').toLowerCase();
+                  final userName = (data['userName'] as String? ?? '').toLowerCase();
+                  final items = data['items'] as List<dynamic>?;
+
+                  bool itemMatch = false;
+                  if (items != null) {
+                    itemMatch = items.any((item) {
+                      if (item is Map<String, dynamic>) {
+                        final bikeName = (item['bikeName'] as String? ?? '').toLowerCase();
+                        return bikeName.contains(query);
+                      }
+                      return false;
+                    });
+                  }
+
+                  return fullName.contains(query) || userName.contains(query) || itemMatch;
+                }).toList();
+
+                if (filteredDocs.isEmpty) {
+                  return const Center(child: Text('Tidak ada hasil yang sesuai dengan pencarian.'));
+                }
+
+                final pendingRentalWidgets = filteredDocs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
                   String buildItemsSummary(List<dynamic>? items) {
                     if (items == null || items.isEmpty) return 'Tidak ada detail sepeda';
                     return items.map((item) {
@@ -62,7 +141,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                         return '$quantity x $bikeName';
                       }
                       return '';
-                    }).join(', '); // Join items with a comma and space
+                    }).join(', ');
                   }
 
                   return Card(
@@ -89,16 +168,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // Show approve button only if status is pending
                           if (data['status'] == 'pending')
                             IconButton(
                               icon: const Icon(Icons.check, color: Colors.green),
                               onPressed: () async {
                                 try {
-                                  // Dapatkan referensi dokumen menggunakan ID untuk memastikan keabsahan
                                   final rentalRef = FirebaseFirestore.instance.collection('rentals').doc(doc.id);
                                   await rentalRef.update({'status': 'awaiting_pickup'});
-
                                   if (mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
                                       const SnackBar(content: Text('Permintaan disetujui. Status diubah menjadi Menunggu Diambil.'), backgroundColor: Colors.green),
@@ -147,11 +223,62 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
           const SizedBox(height: 16),
           const Text('Riwayat Sewa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
           const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: InputDecoration(
+                      labelText: 'Cari Riwayat',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                    ),
+                    onChanged: (query) {
+                      setState(() {
+                        _historySearchQuery = query;
+                      });
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  flex: 1,
+                  child: DropdownButtonFormField<String>(
+                    decoration: InputDecoration(
+                      labelText: 'Status',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8.0),
+                      ),
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                    ),
+                    value: _selectedHistoryStatusFilter,
+                    hint: const Text('Semua'),
+                    items: const [
+                      DropdownMenuItem(value: null, child: Text('Semua')),
+                      DropdownMenuItem(value: 'in_use', child: Text('Digunakan')),
+                      DropdownMenuItem(value: 'completed', child: Text('Selesai')),
+                      DropdownMenuItem(value: 'rejected', child: Text('Ditolak')),
+                    ],
+                    onChanged: (value) {
+                      setState(() {
+                        _selectedHistoryStatusFilter = value;
+                      });
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('rentals')
-                  .where('status', whereIn: ['in_use', 'completed', 'rejected'])
+                  .where('status', whereIn: _selectedHistoryStatusFilter == null
+                       ? ['in_use', 'completed', 'rejected']
+                       : [_selectedHistoryStatusFilter!])
                   .orderBy('createdAt', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
@@ -166,9 +293,34 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   return const Center(child: Text('Belum ada riwayat sewa.'));
                 }
                 final docs = snapshot.data!.docs;
-                final historyRentalWidgets = docs.map((doc) {
+                final filteredDocs = docs.where((doc) {
                   final data = doc.data() as Map<String, dynamic>;
-                  // Use the same helper to create a summary string of rented items
+                  final query = _historySearchQuery.toLowerCase();
+                  if (query.isEmpty) return true;
+                  final fullName = (data['fullName'] as String? ?? '').toLowerCase();
+                  final userName = (data['userName'] as String? ?? '').toLowerCase();
+                  final items = data['items'] as List<dynamic>?;
+
+                  bool itemMatch = false;
+                  if (items != null) {
+                    itemMatch = items.any((item) {
+                      if (item is Map<String, dynamic>) {
+                        final bikeName = (item['bikeName'] as String? ?? '').toLowerCase();
+                        return bikeName.contains(query);
+                      }
+                      return false;
+                    });
+                  }
+
+                  return fullName.contains(query) || userName.contains(query) || itemMatch;
+                }).toList();
+
+                if (filteredDocs.isEmpty) {
+                  return const Center(child: Text('Tidak ada hasil yang sesuai dengan pencarian.'));
+                }
+
+                final historyRentalWidgets = filteredDocs.map((doc) {
+                  final data = doc.data() as Map<String, dynamic>;
                   String buildItemsSummary(List<dynamic>? items) {
                     if (items == null || items.isEmpty) return 'Tidak ada detail sepeda';
                     return items.map((item) {
@@ -178,7 +330,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                         return '$quantity x $bikeName';
                       }
                       return '';
-                    }).join(', '); // Join items with a comma and space
+                    }).join(', ');
                   }
 
                   return Card(
