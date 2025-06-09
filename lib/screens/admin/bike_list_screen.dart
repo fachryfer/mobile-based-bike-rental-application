@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../models/bike.dart';
 import 'edit_bike_screen.dart';
+import 'package:rental_sepeda/utils/app_constants.dart'; // Import AppConstants
 
 class BikeListScreen extends StatelessWidget {
   const BikeListScreen({Key? key}) : super(key: key);
@@ -10,8 +11,13 @@ class BikeListScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        const SizedBox(height: 16),
-        const Text('Daftar Sepeda', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+        Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Text(
+            'Daftar Sepeda Tersedia',
+            style: AppTextStyles.headline2.copyWith(color: AppColors.textColor),
+          ),
+        ),
         const SizedBox(height: 8),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
@@ -25,10 +31,21 @@ class BikeListScreen extends StatelessWidget {
               }
               if (snapshot.hasError) {
                  print('Error fetching bikes: ${snapshot.error}');
-                return Center(child: Text('Error memuat data sepeda: ${snapshot.error}'));
+                return Center(child: Text('Error memuat daftar sepeda: ${snapshot.error}', style: AppTextStyles.bodyText.copyWith(color: AppColors.dangerColor)));
               }
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return const Center(child: Text('Belum ada sepeda ditambahkan.'));
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.bike_scooter, size: 60, color: AppColors.subtitleColor),
+                      const SizedBox(height: 16),
+                      Text('Belum ada sepeda ditambahkan.', style: AppTextStyles.subtitle.copyWith(color: AppColors.subtitleColor)),
+                      const SizedBox(height: 8),
+                      Text('Tambahkan sepeda baru melalui tombol di bawah.', style: AppTextStyles.bodyText.copyWith(color: AppColors.subtitleColor)),
+                    ],
+                  ),
+                );
               }
 
               final bikes = snapshot.data!.docs.map((doc) {
@@ -42,27 +59,28 @@ class BikeListScreen extends StatelessWidget {
                   crossAxisCount: 2,
                   crossAxisSpacing: 12.0,
                   mainAxisSpacing: 12.0,
-                  childAspectRatio: 0.75, // Adjusted aspect ratio to give more vertical space
+                  childAspectRatio: 0.7, // Adjusted aspect ratio to give more vertical space
                 ),
                 itemCount: bikes.length,
                 itemBuilder: (context, index) {
                   final bike = bikes[index];
-                  return Card(
-                     elevation: 4.0,
-                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
-                    clipBehavior: Clip.antiAlias,
+                  return Container(
+                    decoration: AppDecorations.cardDecoration, // Menggunakan dekorasi kartu
                     child: Column(
                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           // Bike Image
                           Expanded(
-                            child: bike.imageUrl != null && bike.imageUrl!.isNotEmpty
-                                ? Image.network(
-                                    bike.imageUrl!,
-                                    fit: BoxFit.cover, // Ensure image covers the allocated space
-                                    errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, size: 50),
-                                  )
-                                : const Center(child: Icon(Icons.pedal_bike, size: 50, color: Colors.blueGrey)),
+                            child: ClipRRect(
+                              borderRadius: const BorderRadius.vertical(top: Radius.circular(15)), // Sudut membulat hanya di atas
+                              child: bike.imageUrl != null && bike.imageUrl!.isNotEmpty
+                                  ? Image.network(
+                                      bike.imageUrl!,
+                                      fit: BoxFit.cover, // Ensure image covers the allocated space
+                                      errorBuilder: (context, error, stackTrace) => Center(child: Icon(Icons.broken_image, size: 50, color: AppColors.subtitleColor)),
+                                    )
+                                  : Center(child: Icon(Icons.pedal_bike, size: 50, color: AppColors.subtitleColor)),
+                            ),
                           ),
                           Padding(
                             padding: const EdgeInsets.all(8.0),
@@ -71,21 +89,24 @@ class BikeListScreen extends StatelessWidget {
                               children: [
                                 Text(
                                   bike.name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                  style: AppTextStyles.title.copyWith(fontSize: 16),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
                                   'Stok: ${bike.quantity}',
-                                  style: TextStyle(fontSize: 14, color: bike.quantity > 0 ? Colors.green : Colors.red),
+                                  style: AppTextStyles.bodyText.copyWith(color: bike.quantity > 0 ? AppColors.successColor : AppColors.dangerColor, fontWeight: FontWeight.bold),
                                 ),
                                 if (bike.description != null && bike.description!.isNotEmpty)
-                                   Text(
-                                    bike.description!,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                   Padding(
+                                     padding: const EdgeInsets.only(top: 4.0),
+                                     child: Text(
+                                      bike.description!,
+                                      maxLines: 2, // Batasi deskripsi hingga 2 baris
+                                      overflow: TextOverflow.ellipsis,
+                                      style: AppTextStyles.bodyText.copyWith(fontSize: 12, color: AppColors.subtitleColor),
+                                    ),
                                   ),
                               ],
                             ),
@@ -105,7 +126,13 @@ class BikeListScreen extends StatelessWidget {
                                           MaterialPageRoute(builder: (context) => EditBikeScreen(bikeId: bike.id)),
                                         );
                                      },
-                                      style: ElevatedButton.styleFrom(padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4), textStyle: const TextStyle(fontSize: 11)), // Adjusted padding and text size
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.primaryColor, // Warna primer
+                                        foregroundColor: Colors.white, // Warna teks tombol
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                        textStyle: AppTextStyles.buttonText.copyWith(fontSize: 14),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
                                      child: const Text('Edit'),
                                    ),
                                  ),
@@ -117,18 +144,24 @@ class BikeListScreen extends StatelessWidget {
                                          await FirebaseFirestore.instance.collection('bikes').doc(bike.id).delete();
                                          if (context.mounted) {
                                             ScaffoldMessenger.of(context).showSnackBar(
-                                              const SnackBar(content: Text('Sepeda berhasil dihapus'), backgroundColor: Colors.green)
+                                              const SnackBar(content: Text('Sepeda berhasil dihapus'), backgroundColor: AppColors.successColor)
                                             );
                                          }
                                        } catch (e) {
                                           if (context.mounted) {
                                             ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(content: Text('Gagal menghapus sepeda: $e'), backgroundColor: Colors.red)
+                                              SnackBar(content: Text('Gagal menghapus sepeda: $e'), backgroundColor: AppColors.dangerColor)
                                             );
                                           }
                                        }
                                      },
-                                     style: ElevatedButton.styleFrom(backgroundColor: Colors.red, padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4), textStyle: const TextStyle(fontSize: 11)), // Adjusted padding and text size
+                                     style: ElevatedButton.styleFrom(
+                                       backgroundColor: AppColors.dangerColor, // Warna bahaya
+                                       foregroundColor: Colors.white, // Warna teks tombol
+                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                       textStyle: AppTextStyles.buttonText.copyWith(fontSize: 14),
+                                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                     ),
                                      child: const Text('Hapus'),
                                    ),
                                  ),

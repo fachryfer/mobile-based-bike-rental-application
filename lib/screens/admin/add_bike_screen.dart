@@ -5,6 +5,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/services.dart';
+import 'package:rental_sepeda/utils/app_constants.dart';
 
 class AddBikeScreen extends StatefulWidget {
   const AddBikeScreen({Key? key}) : super(key: key);
@@ -144,9 +145,9 @@ class _AddBikeScreenState extends State<AddBikeScreen> {
             children: <Widget>[
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(
+                decoration: AppDecorations.inputDecoration.copyWith(
                   labelText: 'Nama Sepeda',
-                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.pedal_bike, color: AppColors.primaryColor),
                 ),
                 validator: (value) {
                   if (value == null || value.isEmpty) {
@@ -154,13 +155,14 @@ class _AddBikeScreenState extends State<AddBikeScreen> {
                   }
                   return null;
                 },
+                style: AppTextStyles.bodyText,
               ),
               const SizedBox(height: 16.0),
               TextFormField(
                 controller: _quantityController,
-                decoration: const InputDecoration(
+                decoration: AppDecorations.inputDecoration.copyWith(
                   labelText: 'Jumlah Ketersediaan',
-                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.numbers, color: AppColors.primaryColor),
                   suffixText: ' pcs',
                 ),
                 keyboardType: TextInputType.number,
@@ -176,13 +178,14 @@ class _AddBikeScreenState extends State<AddBikeScreen> {
                   }
                   return null;
                 },
+                style: AppTextStyles.bodyText,
               ),
               const SizedBox(height: 16.0),
               TextFormField(
                 controller: _priceController,
-                decoration: const InputDecoration(
+                decoration: AppDecorations.inputDecoration.copyWith(
                   labelText: 'Harga Sewa per Hari',
-                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.attach_money, color: AppColors.primaryColor),
                   prefixText: 'Rp ',
                 ),
                 keyboardType: TextInputType.numberWithOptions(decimal: true),
@@ -198,16 +201,23 @@ class _AddBikeScreenState extends State<AddBikeScreen> {
                   }
                   return null;
                 },
+                style: AppTextStyles.bodyText,
               ),
               const SizedBox(height: 16.0),
               TextFormField(
                 controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Deskripsi (Opsional)',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
+                decoration: AppDecorations.inputDecoration.copyWith(
+                  labelText: 'Deskripsi',
+                  prefixIcon: Icon(Icons.description, color: AppColors.primaryColor),
                 ),
                 maxLines: 3,
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Mohon masukkan deskripsi sepeda';
+                  }
+                  return null;
+                },
+                style: AppTextStyles.bodyText,
               ),
               const SizedBox(height: 16.0),
               Row(

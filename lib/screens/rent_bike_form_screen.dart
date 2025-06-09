@@ -7,6 +7,7 @@ import 'dart:convert'; // Import for jsonDecode
 import 'package:http/http.dart' as http; // Import http
 import '../models/bike.dart'; // Import Bike model
 import 'package:intl/intl.dart' as intl;
+import 'package:rental_sepeda/utils/app_constants.dart'; // Import AppConstants
 
 class RentBikeFormScreen extends StatefulWidget {
   final String? bikeId; // Add nullable bikeId parameter
@@ -303,225 +304,255 @@ class _RentBikeFormScreenState extends State<RentBikeFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Form Sewa Sepeda')),
+      appBar: AppBar(
+        title: const Text('Form Sewa Sepeda'),
+        // AppBar theme is handled by MaterialApp theme in main.dart
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
+          padding: const EdgeInsets.all(24.0),
           child: Form(
             key: _formKey,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // --- Input Fields (Full Name, Phone Number, Date, Duration) ---
-                 TextFormField(
+                Text(
+                  'Isi Detail Penyewaan',
+                  style: AppTextStyles.headline2.copyWith(color: AppColors.textColor),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                TextFormField(
                   controller: _fullNameController,
-                  decoration: const InputDecoration(
+                  decoration: AppDecorations.inputDecoration.copyWith(
                     labelText: 'Nama Lengkap',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline),
+                    prefixIcon: Icon(Icons.person, color: AppColors.primaryColor),
                   ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Mohon masukkan nama lengkap';
-                    }
-                    return null;
-                  },
+                  validator: (value) => value == null || value.isEmpty ? 'Nama lengkap wajib diisi' : null,
+                  style: AppTextStyles.bodyText,
                 ),
                 const SizedBox(height: 16),
-                 TextFormField(
+                TextFormField(
                   controller: _phoneNumberController,
-                   decoration: const InputDecoration(
+                  decoration: AppDecorations.inputDecoration.copyWith(
                     labelText: 'Nomor Telepon',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone),
+                    prefixIcon: Icon(Icons.phone, color: AppColors.primaryColor),
                   ),
                   keyboardType: TextInputType.phone,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Mohon masukkan nomor telepon';
-                    }
-                    return null;
-                  },
+                  validator: (value) => value == null || value.isEmpty ? 'Nomor telepon wajib diisi' : null,
+                  style: AppTextStyles.bodyText,
                 ),
-                 const SizedBox(height: 16),
-                 ListTile(
-                  leading: const Icon(Icons.calendar_today),
-                  title: Text(_selectedDate == null ? 'Pilih Tanggal Sewa' : 'Tanggal Sewa: ${intl.DateFormat('dd/MM/yyyy').format(_selectedDate!)}'),
-                   trailing: const Icon(Icons.arrow_downward),
+                const SizedBox(height: 16),
+                // Dynamic bike selection and quantity
+                ..._selectedItems.asMap().entries.map((entry) {
+                  int index = entry.key;
+                  Map<String, dynamic> item = entry.value;
+                  String? currentBikeId = item['bikeId'];
+                  int currentQuantity = item['quantity'] ?? 1;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16.0), // Spasi antar item sepeda
+                    child: Container(
+                      decoration: AppDecorations.cardDecoration.copyWith(borderRadius: BorderRadius.circular(10)), // Card style for each item
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: DropdownButtonFormField<String>(
+                                  decoration: AppDecorations.inputDecoration.copyWith(
+                                    labelText: 'Pilih Sepeda',
+                                    prefixIcon: Icon(Icons.directions_bike, color: AppColors.primaryColor),
+                                    isDense: true,
+                                  ),
+                                  value: currentBikeId,
+                                  hint: Text('Pilih sepeda', style: AppTextStyles.bodyText.copyWith(color: AppColors.subtitleColor)),
+                                  isExpanded: true,
+                                  items: _availableBikes.map((bike) {
+                                    return DropdownMenuItem<String>(
+                                      value: bike.id,
+                                      child: Text(
+                                        '${bike.name} (Stok: ${bike.quantity}, Rp${bike.pricePerDay.toStringAsFixed(0)}/hari)',
+                                        style: AppTextStyles.bodyText.copyWith(fontSize: 14), // Reduce font size slightly
+                                        maxLines: 1, // Ensure text is on a single line
+                                        overflow: TextOverflow.ellipsis, // Add ellipsis if text overflows
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (bikeId) {
+                                    setState(() {
+                                      item['bikeId'] = bikeId;
+                                      _updateTotalPrice();
+                                    });
+                                  },
+                                  validator: (value) => value == null ? 'Pilih sepeda' : null,
+                                  style: AppTextStyles.bodyText.copyWith(color: AppColors.textColor, fontSize: 12), // Reduce font size for selected text
+                                ),
+                              ),
+                              if (_selectedItems.length > 1) // Allow removing if more than one item
+                                IconButton(
+                                  icon: Icon(Icons.remove_circle, color: AppColors.dangerColor, size: 20), // Reduce icon size
+                                  onPressed: () => _removeItem(index),
+                                ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                          TextFormField(
+                            decoration: AppDecorations.inputDecoration.copyWith(
+                              labelText: 'Jumlah',
+                              prefixIcon: Icon(Icons.filter_hdr, color: AppColors.primaryColor),
+                            ),
+                            keyboardType: TextInputType.number,
+                            initialValue: currentQuantity.toString(),
+                            onChanged: (value) {
+                              setState(() {
+                                item['quantity'] = int.tryParse(value) ?? 0;
+                                _updateTotalPrice();
+                              });
+                            },
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return 'Jumlah wajib diisi';
+                              }
+                              final quantity = int.tryParse(value);
+                              if (quantity == null || quantity <= 0) {
+                                return 'Jumlah harus lebih dari 0';
+                              }
+                              // Check stock availability
+                              final selectedBike = _availableBikes.firstWhere((bike) => bike.id == currentBikeId, orElse: () => Bike(id: '', name: '', pricePerDay: 0.0, quantity: 0));
+                              if (quantity > selectedBike.quantity) {
+                                return 'Stok hanya tersisa ${selectedBike.quantity}';
+                              }
+                              return null;
+                            },
+                            style: AppTextStyles.bodyText,
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }).toList(),
+                // Add new item button
+                ElevatedButton.icon(
+                  onPressed: _addItem,
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  label: Text('Tambah Sepeda Lain', style: AppTextStyles.buttonText.copyWith(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryColor, // Warna primer
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                GestureDetector(
                   onTap: _pickDate,
+                  child: AbsorbPointer(
+                    child: TextFormField(
+                      decoration: AppDecorations.inputDecoration.copyWith(
+                        labelText: 'Tanggal Mulai Sewa',
+                        prefixIcon: Icon(Icons.calendar_today, color: AppColors.primaryColor),
+                      ),
+                      controller: TextEditingController(
+                        text: _selectedDate == null
+                            ? ''
+                            : intl.DateFormat('dd MMMM yyyy').format(_selectedDate!),
+                      ),
+                      validator: (value) => value == null || value.isEmpty ? 'Tanggal mulai sewa wajib diisi' : null,
+                      style: AppTextStyles.bodyText,
+                    ),
+                  ),
                 ),
-                 const SizedBox(height: 16),
-                 TextFormField(
+                const SizedBox(height: 16),
+                TextFormField(
                   controller: _durationController,
-                   decoration: const InputDecoration(
+                  decoration: AppDecorations.inputDecoration.copyWith(
                     labelText: 'Durasi Sewa (hari)',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.timer),
+                    prefixIcon: Icon(Icons.timer, color: AppColors.primaryColor),
                   ),
                   keyboardType: TextInputType.number,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Mohon masukkan durasi sewa';
+                      return 'Durasi sewa wajib diisi';
                     }
                     if (int.tryParse(value) == null || int.parse(value) <= 0) {
                       return 'Durasi harus angka positif';
                     }
                     return null;
                   },
+                  style: AppTextStyles.bodyText,
                 ),
-                if (_endDate != null) ...[
-                  const SizedBox(height: 16),
-                  Text('Tanggal Pengembalian: ${intl.DateFormat('dd/MM/yyyy').format(_endDate!)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ],
-                 const SizedBox(height: 24),
-
-                // --- Bike Selection and Quantity (Dynamic List) ---
-                const Text('Pilih Sepeda:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
-                ListView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(), // Disable scrolling for nested ListView
-                  itemCount: _selectedItems.length,
-                  itemBuilder: (context, index) {
-                    return _buildBikeItemRow(index);
-                  },
+                TextFormField(
+                  decoration: AppDecorations.inputDecoration.copyWith(
+                    labelText: 'Tanggal Selesai Sewa',
+                    prefixIcon: Icon(Icons.event, color: AppColors.primaryColor),
+                  ),
+                  controller: TextEditingController(
+                    text: _endDate == null
+                        ? ''
+                        : intl.DateFormat('dd MMMM yyyy').format(_endDate!),
+                  ),
+                  readOnly: true,
+                  style: AppTextStyles.bodyText,
                 ),
-                 const SizedBox(height: 16),
-                Center(
-                  child: ElevatedButton.icon(
-                    icon: const Icon(Icons.add),
-                    label: const Text('Tambah Sepeda Lain'),
-                    onPressed: _addItem,
+                const SizedBox(height: 24),
+                Text(
+                  'Total Harga: Rp${_totalPrice.toStringAsFixed(0)}',
+                  style: AppTextStyles.headline2.copyWith(color: AppColors.successColor), // Lebih menonjol
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                // Image picker and preview
+                GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    height: 150,
+                    decoration: BoxDecoration(
+                      color: AppColors.backgroundColor,
+                      borderRadius: BorderRadius.circular(15),
+                      border: Border.all(color: AppColors.primaryColor, width: 2),
+                    ),
+                    alignment: Alignment.center,
+                    child: _selectedImage != null
+                        ? ClipRRect(
+                            borderRadius: BorderRadius.circular(13), // Sedikit lebih kecil dari border luar
+                            child: Image.file(
+                              _selectedImage!,
+                              width: double.infinity,
+                              height: double.infinity,
+                              fit: BoxFit.cover,
+                            ),
+                          )
+                        : Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.camera_alt, size: 50, color: AppColors.subtitleColor),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Pilih Bukti Pembayaran/KTP',
+                                style: AppTextStyles.bodyText.copyWith(color: AppColors.subtitleColor),
+                              ),
+                            ],
+                          ),
                   ),
                 ),
-
-                const SizedBox(height: 24),
-
-                // --- Photo Upload ---
-                const Text('Unggah Foto/Dokumen (Opsional):', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
-                 OutlinedButton.icon(
-                   icon: const Icon(Icons.camera_alt),
-                  label: Text(_selectedImage == null ? 'Pilih Foto' : 'Foto Terpilih'),
-                   onPressed: _pickImage,
-                 ),
-                if (_selectedImage != null) ...[
-                  const SizedBox(height: 16),
-                  Image.file(_selectedImage!, height: 150),
-                ],
-
-                const SizedBox(height: 24),
-
-                 // --- Total Price Display ---
-                Text(
-                   'Total Harga: Rp${_totalPrice.toStringAsFixed(0)}',
-                   style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.green),
-                 ),
-
-                const SizedBox(height: 32),
-
-                // --- Submit Button ---
                 ElevatedButton(
                   onPressed: _isLoading ? null : _submit,
-                  child: _isLoading ? const CircularProgressIndicator() : const Text('Kirim Permintaan Sewa'),
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : Text('Sewa Sepeda', style: AppTextStyles.buttonText.copyWith(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.buttonColor,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
                 ),
               ],
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  // Helper widget to build each bike item row
-  Widget _buildBikeItemRow(int index) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            flex: 3,
-            child: DropdownButtonFormField<String>(
-              decoration: const InputDecoration(
-                labelText: 'Jenis Sepeda',
-                border: OutlineInputBorder(),
-                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16), // Adjust padding
-              ),
-              value: _selectedItems[index]['bikeId'],
-              items: _availableBikes.map((bike) {
-                // Only show bikes with quantity > 0
-                if (bike.quantity > 0) {
-                  return DropdownMenuItem<String>(
-                    value: bike.id,
-                    // Display bike name and available stock
-                    child: Text('${bike.name} (Stok: ${bike.quantity})'),
-                  );
-                } else {
-                  return null; // Don't show if stock is 0
-                }
-              }).whereType<DropdownMenuItem<String>>().toList(), // Filter out nulls
-              onChanged: (value) {
-                setState(() {
-                  _selectedItems[index]['bikeId'] = value;
-                  _updateTotalPrice(); // Update total price when bike changes
-                });
-              },
-              validator: (value) {
-                if (value == null) {
-                  return 'Pilih jenis sepeda';
-                }
-                return null;
-              },
-            ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            flex: 1,
-            child: TextFormField(
-              initialValue: _selectedItems[index]['quantity'].toString(),
-              decoration: const InputDecoration(
-                labelText: 'Jumlah',
-                border: OutlineInputBorder(),
-                 contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16), // Adjust padding
-              ),
-              keyboardType: TextInputType.number,
-              validator: (value) {
-                if (value == null || value.isEmpty) {
-                  return ''; // Validator message handled by the overall form validation
-                }
-                 final quantity = int.tryParse(value);
-                 if (quantity == null || quantity <= 0) {
-                   return ''; // Validator message handled by the overall form validation
-                 }
-                 // Check against available stock for this specific bike type
-                 final selectedBikeId = _selectedItems[index]['bikeId'];
-                 if (selectedBikeId != null) {
-                    final availableBike = _availableBikes.firstWhere((bike) => bike.id == selectedBikeId);
-                    if (quantity > availableBike.quantity) {
-                      return 'Stok tidak cukup';
-                    }
-                 }
-                return null;
-              },
-              onChanged: (value) {
-                 final quantity = int.tryParse(value) ?? 0; // Use tryParse
-                setState(() {
-                  _selectedItems[index]['quantity'] = quantity;
-                   _updateTotalPrice(); // Update total price when quantity changes
-                });
-              },
-            ),
-          ),
-          // Add remove button if there's more than one item
-          if (_selectedItems.length > 1) ...[
-            const SizedBox(width: 8),
-            IconButton(
-              icon: const Icon(Icons.remove_circle_outline, color: Colors.red),
-              onPressed: () => _removeItem(index),
-            ),
-          ],
-        ],
       ),
     );
   }

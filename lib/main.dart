@@ -2,6 +2,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:rental_sepeda/utils/app_constants.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
@@ -27,7 +28,37 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.light,
-        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: AppColors.backgroundColor,
+        colorScheme: ColorScheme.fromSwatch(
+          primarySwatch: Colors.blue,
+          accentColor: AppColors.accentColor,
+          brightness: Brightness.light,
+        ).copyWith(secondary: AppColors.accentColor),
+        appBarTheme: AppBarTheme(
+          backgroundColor: AppColors.primaryColor,
+          foregroundColor: Colors.white,
+          centerTitle: true,
+          titleTextStyle: AppTextStyles.headline2.copyWith(color: Colors.white),
+        ),
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.buttonColor,
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            textStyle: AppTextStyles.buttonText,
+          ),
+        ),
+        textTheme: const TextTheme(
+          displayLarge: AppTextStyles.headline1,
+          displayMedium: AppTextStyles.headline2,
+          titleLarge: AppTextStyles.title,
+          bodyLarge: AppTextStyles.bodyText,
+          bodyMedium: AppTextStyles.bodyText,
+          labelLarge: AppTextStyles.buttonText,
+        ),
       ),
       home: const AuthWrapper(),
       routes: {

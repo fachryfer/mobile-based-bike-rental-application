@@ -4,6 +4,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'rental_detail_screen.dart';
 import 'admin/add_bike_screen.dart';
 import 'admin/bike_list_screen.dart';
+import 'package:rental_sepeda/utils/app_constants.dart';
 
 class AdminHomeScreen extends StatefulWidget {
   const AdminHomeScreen({super.key});
@@ -32,8 +33,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       // Permintaan Sewa
       Column(
         children: [
-          const SizedBox(height: 16),
-          const Text('Permintaan Sewa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              'Permintaan Sewa Masuk',
+              style: AppTextStyles.headline2.copyWith(color: AppColors.textColor),
+            ),
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -41,13 +47,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               children: [
                 Expanded(
                   child: TextField(
-                    decoration: InputDecoration(
+                    decoration: AppDecorations.inputDecoration.copyWith(
                       labelText: 'Cari Permintaan',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
+                      prefixIcon: Icon(Icons.search, color: AppColors.primaryColor),
                     ),
+                    style: AppTextStyles.bodyText,
                     onChanged: (query) {
                       setState(() {
                         _pendingSearchQuery = query;
@@ -59,15 +63,12 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 Flexible(
                   flex: 1,
                   child: DropdownButtonFormField<String>(
-                    decoration: InputDecoration(
+                    decoration: AppDecorations.inputDecoration.copyWith(
                       labelText: 'Status',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                     ),
                     value: _selectedPendingStatusFilter,
-                    hint: const Text('Semua'),
+                    hint: Text('Semua', style: AppTextStyles.bodyText.copyWith(color: AppColors.subtitleColor)),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Semua')),
                       DropdownMenuItem(value: 'pending', child: Text('Pending')),
@@ -78,6 +79,7 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                         _selectedPendingStatusFilter = value;
                       });
                     },
+                    style: AppTextStyles.bodyText.copyWith(color: AppColors.textColor),
                   ),
                 ),
               ],
@@ -101,7 +103,16 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   return Center(child: Text('Error memuat data: ${snapshot.error}'));
                 }
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text('Tidak ada permintaan sewa.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.assignment, size: 60, color: AppColors.subtitleColor),
+                        const SizedBox(height: 16),
+                        Text('Tidak ada permintaan sewa saat ini.', style: AppTextStyles.subtitle.copyWith(color: AppColors.subtitleColor)),
+                      ],
+                    ),
+                  );
                 }
                 final docs = snapshot.data!.docs;
                 final filteredDocs = docs.where((doc) {
@@ -127,7 +138,16 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 }).toList();
 
                 if (filteredDocs.isEmpty) {
-                  return const Center(child: Text('Tidak ada hasil yang sesuai dengan pencarian.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 60, color: AppColors.subtitleColor),
+                        const SizedBox(height: 16),
+                        Text('Tidak ada hasil yang sesuai dengan pencarian.', style: AppTextStyles.subtitle.copyWith(color: AppColors.subtitleColor)),
+                      ],
+                    ),
+                  );
                 }
 
                 final pendingRentalWidgets = filteredDocs.map((doc) {
@@ -144,59 +164,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     }).join(', ');
                   }
 
-                  return Card(
+                  return Container(
                     key: ValueKey(doc.id),
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(
-                      leading: const Icon(Icons.pedal_bike, color: Colors.blue),
-                      title: Text(data['fullName'] ?? 'Nama Lengkap Tidak Tersedia', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Pengguna: ${data['userName'] ?? '-'}', style: const TextStyle(fontSize: 13)),
-                          const SizedBox(height: 2),
-                          Text('Sepeda: ${buildItemsSummary(data['items'] as List?)}', style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
-                          const SizedBox(height: 2),
-                          Text('Durasi: ${data['duration'] ?? '-'} hari', style: const TextStyle(fontSize: 13)),
-                          Text('Status: ${data['status']?.toString().replaceAll('_', ' ').toUpperCase() ?? '-'}', style: TextStyle(color: _getStatusColor(data['status'] ?? 'pending'), fontWeight: FontWeight.w600, fontSize: 13)),
-                          if (data['createdAt'] != null)
-                            Text('Tanggal Pengajuan: ${(data['createdAt'] as Timestamp).toDate().toString().substring(0, 16)}', style: const TextStyle(fontSize: 13)),
-                          if (data['totalPrice'] != null)
-                            Text('Total: Rp${(data['totalPrice'] ?? 0.0).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
-                        ],
-                      ),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (data['status'] == 'pending')
-                            IconButton(
-                              icon: const Icon(Icons.check, color: Colors.green),
-                              onPressed: () async {
-                                try {
-                                  final rentalRef = FirebaseFirestore.instance.collection('rentals').doc(doc.id);
-                                  await rentalRef.update({'status': 'awaiting_pickup'});
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Permintaan disetujui. Status diubah menjadi Menunggu Diambil.'), backgroundColor: Colors.green),
-                                    );
-                                  }
-                                } catch (e) {
-                                  if (mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('Gagal menyetujui permintaan: $e'), backgroundColor: Colors.red)
-                                    );
-                                  }
-                                }
-                              },
-                            ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.red),
-                            onPressed: () async {
-                              await doc.reference.update({'status': 'rejected'});
-                            },
-                          ),
-                        ],
-                      ),
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: AppDecorations.cardDecoration,
+                    child: InkWell(
                       onTap: () {
                         Navigator.push(
                           context,
@@ -205,6 +177,99 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                           ),
                         );
                       },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(data['fullName'] ?? 'Nama Lengkap Tidak Tersedia',
+                                      style: AppTextStyles.title.copyWith(fontSize: 18), overflow: TextOverflow.ellipsis),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(data['status']?.toString().replaceAll('_', ' ').toUpperCase() ?? '-',
+                                    style: AppTextStyles.bodyText.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: _getStatusColor(data['status'] ?? 'pending'),
+                                    )),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text('Email: ${data['userName'] ?? '-'}', style: AppTextStyles.bodyText.copyWith(color: AppColors.subtitleColor)),
+                            const SizedBox(height: 2),
+                            Text('Sepeda: ${buildItemsSummary(data['items'] as List?)}', style: AppTextStyles.bodyText.copyWith(fontStyle: FontStyle.italic)),
+                            const SizedBox(height: 2),
+                            Text('Durasi: ${data['duration'] ?? '-'} hari', style: AppTextStyles.bodyText),
+                            const SizedBox(height: 2),
+                            if (data['createdAt'] != null)
+                              Text('Tanggal Pengajuan: ${(data['createdAt'] as Timestamp).toDate().toString().substring(0, 16)}', style: AppTextStyles.bodyText),
+                            const SizedBox(height: 2),
+                            if (data['totalPrice'] != null)
+                              Text('Total: Rp${(data['totalPrice'] ?? 0.0).toStringAsFixed(0)}', style: AppTextStyles.title.copyWith(color: AppColors.successColor)),
+                            const SizedBox(height: 16),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                if (data['status'] == 'pending')
+                                  ElevatedButton.icon(
+                                    icon: const Icon(Icons.check, color: Colors.white),
+                                    label: Text('Setujui', style: AppTextStyles.buttonText.copyWith(color: Colors.white)),
+                                    onPressed: () async {
+                                      try {
+                                        final rentalRef = FirebaseFirestore.instance.collection('rentals').doc(doc.id);
+                                        await rentalRef.update({'status': 'awaiting_pickup'});
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Permintaan disetujui. Status diubah menjadi Menunggu Diambil.'), backgroundColor: AppColors.successColor),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Gagal menyetujui permintaan: $e'), backgroundColor: AppColors.dangerColor),
+                                          );
+                                        }
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.successColor,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                                const SizedBox(width: 8),
+                                if (data['status'] == 'pending' || data['status'] == 'awaiting_pickup')
+                                  ElevatedButton.icon(
+                                    icon: const Icon(Icons.close, color: Colors.white),
+                                    label: Text('Tolak', style: AppTextStyles.buttonText.copyWith(color: Colors.white)),
+                                    onPressed: () async {
+                                      try {
+                                        await doc.reference.update({'status': 'rejected'});
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(content: Text('Permintaan ditolak.'), backgroundColor: AppColors.dangerColor),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text('Gagal menolak permintaan: $e'), backgroundColor: AppColors.dangerColor),
+                                          );
+                                        }
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppColors.dangerColor,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
                   );
                 }).toList();
@@ -220,8 +285,13 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       // Riwayat Sewa
       Column(
         children: [
-          const SizedBox(height: 16),
-          const Text('Riwayat Sewa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+          Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Text(
+              'Riwayat Sewa Selesai',
+              style: AppTextStyles.headline2.copyWith(color: AppColors.textColor),
+            ),
+          ),
           const SizedBox(height: 8),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
@@ -229,13 +299,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
               children: [
                 Expanded(
                   child: TextField(
-                    decoration: InputDecoration(
+                    decoration: AppDecorations.inputDecoration.copyWith(
                       labelText: 'Cari Riwayat',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
+                      prefixIcon: Icon(Icons.search, color: AppColors.primaryColor),
                     ),
+                    style: AppTextStyles.bodyText,
                     onChanged: (query) {
                       setState(() {
                         _historySearchQuery = query;
@@ -247,26 +315,24 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 Flexible(
                   flex: 1,
                   child: DropdownButtonFormField<String>(
-                    decoration: InputDecoration(
+                    decoration: AppDecorations.inputDecoration.copyWith(
                       labelText: 'Status',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(8.0),
-                      ),
                       contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
                     ),
                     value: _selectedHistoryStatusFilter,
-                    hint: const Text('Semua'),
+                    hint: Text('Semua', style: AppTextStyles.bodyText.copyWith(color: AppColors.subtitleColor)),
                     items: const [
                       DropdownMenuItem(value: null, child: Text('Semua')),
-                      DropdownMenuItem(value: 'in_use', child: Text('Digunakan')),
                       DropdownMenuItem(value: 'completed', child: Text('Selesai')),
                       DropdownMenuItem(value: 'rejected', child: Text('Ditolak')),
+                      DropdownMenuItem(value: 'in_use', child: Text('Sedang Digunakan')),
                     ],
                     onChanged: (value) {
                       setState(() {
                         _selectedHistoryStatusFilter = value;
                       });
                     },
+                    style: AppTextStyles.bodyText.copyWith(color: AppColors.textColor),
                   ),
                 ),
               ],
@@ -290,7 +356,16 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                   return Center(child: Text('Error memuat data: ${snapshot.error}'));
                 }
                 if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                  return const Center(child: Text('Belum ada riwayat sewa.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.history, size: 60, color: AppColors.subtitleColor),
+                        const SizedBox(height: 16),
+                        Text('Belum ada riwayat sewa.', style: AppTextStyles.subtitle.copyWith(color: AppColors.subtitleColor)),
+                      ],
+                    ),
+                  );
                 }
                 final docs = snapshot.data!.docs;
                 final filteredDocs = docs.where((doc) {
@@ -316,7 +391,16 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                 }).toList();
 
                 if (filteredDocs.isEmpty) {
-                  return const Center(child: Text('Tidak ada hasil yang sesuai dengan pencarian.'));
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.search_off, size: 60, color: AppColors.subtitleColor),
+                        const SizedBox(height: 16),
+                        Text('Tidak ada hasil yang sesuai dengan pencarian.', style: AppTextStyles.subtitle.copyWith(color: AppColors.subtitleColor)),
+                      ],
+                    ),
+                  );
                 }
 
                 final historyRentalWidgets = filteredDocs.map((doc) {
@@ -333,27 +417,11 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                     }).join(', ');
                   }
 
-                  return Card(
+                  return Container(
                     key: ValueKey(doc.id),
-                    margin: const EdgeInsets.symmetric(vertical: 6),
-                    child: ListTile(
-                      leading: const Icon(Icons.pedal_bike, color: Colors.grey),
-                      title: Text(data['fullName'] ?? 'Nama Lengkap Tidak Tersedia', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                      subtitle: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Pengguna: ${data['userName'] ?? '-'}', style: const TextStyle(fontSize: 13)),
-                          const SizedBox(height: 2),
-                          Text('Sepeda: ${buildItemsSummary(data['items'] as List?)}', style: const TextStyle(fontSize: 13, fontStyle: FontStyle.italic)),
-                          const SizedBox(height: 2),
-                          Text('Durasi: ${data['duration'] ?? '-'} hari', style: const TextStyle(fontSize: 13)),
-                          Text('Status: ${data['status']?.toString().replaceAll('_', ' ').toUpperCase() ?? '-'}', style: TextStyle(color: _getStatusColor(data['status'] ?? 'pending'), fontWeight: FontWeight.w600, fontSize: 13)),
-                          if (data['createdAt'] != null)
-                            Text('Tanggal Sewa: ${(data['createdAt'] as Timestamp).toDate().toString().substring(0, 16)}', style: const TextStyle(fontSize: 13)),
-                          if (data['totalPrice'] != null)
-                            Text('Total: Rp${(data['totalPrice'] ?? 0.0).toStringAsFixed(0)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.green)),
-                        ],
-                      ),
+                    margin: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: AppDecorations.cardDecoration,
+                    child: InkWell(
                       onTap: () {
                         Navigator.push(
                           context,
@@ -362,6 +430,41 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
                           ),
                         );
                       },
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(
+                                  child: Text(data['fullName'] ?? 'Nama Lengkap Tidak Tersedia',
+                                      style: AppTextStyles.title.copyWith(fontSize: 18), overflow: TextOverflow.ellipsis),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(data['status']?.toString().replaceAll('_', ' ').toUpperCase() ?? '-',
+                                    style: AppTextStyles.bodyText.copyWith(
+                                      fontWeight: FontWeight.bold,
+                                      color: _getStatusColor(data['status'] ?? 'pending'),
+                                    )),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text('Email: ${data['userName'] ?? '-'}', style: AppTextStyles.bodyText.copyWith(color: AppColors.subtitleColor)),
+                            const SizedBox(height: 2),
+                            Text('Sepeda: ${buildItemsSummary(data['items'] as List?)}', style: AppTextStyles.bodyText.copyWith(fontStyle: FontStyle.italic)),
+                            const SizedBox(height: 2),
+                            Text('Durasi: ${data['duration'] ?? '-'} hari', style: AppTextStyles.bodyText),
+                            const SizedBox(height: 2),
+                            if (data['createdAt'] != null)
+                              Text('Tanggal Pengajuan: ${(data['createdAt'] as Timestamp).toDate().toString().substring(0, 16)}', style: AppTextStyles.bodyText),
+                            const SizedBox(height: 2),
+                            if (data['totalPrice'] != null)
+                              Text('Total: Rp${(data['totalPrice'] ?? 0.0).toStringAsFixed(0)}', style: AppTextStyles.title.copyWith(color: AppColors.successColor)),
+                          ],
+                        ),
+                      ),
                     ),
                   );
                 }).toList();
@@ -376,58 +479,81 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
       ),
       // Daftar Sepeda
       const BikeListScreen(),
-      // Profil/Logout
+      // Tab Profil/Logout Admin
       Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(Icons.admin_panel_settings, size: 80, color: Colors.blue),
-            const SizedBox(height: 16),
-            Text(user?.email ?? '-', style: const TextStyle(fontSize: 18)),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              icon: const Icon(Icons.logout),
-              label: const Text('Logout'),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-              onPressed: () async {
-                await FirebaseAuth.instance.signOut();
-                if (mounted) {
-                  Navigator.pushReplacementNamed(context, '/login');
-                }
-              },
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Container(
+            decoration: AppDecorations.cardDecoration,
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.admin_panel_settings_outlined, size: 80, color: AppColors.primaryColor),
+                const SizedBox(height: 16),
+                Text(
+                  user?.email ?? '-',
+                  style: AppTextStyles.title,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.logout, color: Colors.white),
+                  label: Text('Logout', style: AppTextStyles.buttonText.copyWith(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.dangerColor,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () async {
+                    await FirebaseAuth.instance.signOut();
+                    if (mounted) {
+                      Navigator.pushReplacementNamed(context, '/login');
+                    }
+                  },
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     ];
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Dashboard Admin'),
-        centerTitle: true,
+        title: const Text('Admin Panel'),
       ),
       body: SafeArea(
         child: SizedBox.expand(
           child: _pages[_selectedIndex],
         ),
       ),
-      floatingActionButton: _selectedIndex == 2 // Only show button on Daftar Sepeda tab
+      floatingActionButton: _selectedIndex == 2
           ? FloatingActionButton(
               onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const AddBikeScreen()));
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const AddBikeScreen()),
+                );
               },
-              child: const Icon(Icons.add),
+              backgroundColor: AppColors.accentColor,
+              foregroundColor: AppColors.textColor,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+              child: const Icon(Icons.add_road),
             )
           : null,
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: _onItemTapped,
-        unselectedItemColor: Colors.grey, // Optional: style unselected items
-        selectedItemColor: Colors.blue, // Optional: style selected items
+        selectedItemColor: AppColors.primaryColor,
+        unselectedItemColor: AppColors.subtitleColor,
+        backgroundColor: AppColors.cardColor,
+        elevation: 10,
+        type: BottomNavigationBarType.fixed,
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.pending_actions), label: 'Permintaan'),
+          BottomNavigationBarItem(icon: Icon(Icons.assignment), label: 'Permintaan'),
           BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Riwayat'),
-          BottomNavigationBarItem(icon: Icon(Icons.directions_bike), label: 'Sepeda'), // New tab item
+          BottomNavigationBarItem(icon: Icon(Icons.directions_bike), label: 'Sepeda'),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: 'Profil'),
         ],
       ),
@@ -437,17 +563,17 @@ class _AdminHomeScreenState extends State<AdminHomeScreen> {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'pending':
-        return Colors.orange;
+        return AppColors.accentColor;
       case 'awaiting_pickup':
-        return Colors.blue;
+        return AppColors.primaryColor;
       case 'in_use':
-        return Colors.purple;
+        return Colors.deepPurple;
       case 'completed':
-        return Colors.green;
+        return AppColors.successColor;
       case 'rejected':
-        return Colors.red;
+        return AppColors.dangerColor;
       default:
-        return Colors.black;
+        return AppColors.textColor;
     }
   }
 } 
